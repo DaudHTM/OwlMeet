@@ -10,6 +10,27 @@ grant execute on function public.can_view_event(public.events) to authenticated;
 grant execute on function public.can_view_event_members(uuid) to authenticated;
 grant execute on function public.join_private_event(uuid) to authenticated;
 
+-- New Supabase projects do not automatically expose public tables to the Data
+-- API. Grant only the operations OwlMeet's authenticated clients require; RLS
+-- policies below and in the initial migration still decide which rows are
+-- accessible.
+grant usage on schema public to authenticated;
+
+grant select on public.profiles to authenticated;
+grant update (
+  full_name,
+  major,
+  age,
+  class_year,
+  residential_college,
+  avatar_url,
+  onboarding_complete
+) on public.profiles to authenticated;
+
+grant select, insert, update, delete on public.friendships to authenticated;
+grant select, insert, update, delete on public.events to authenticated;
+grant select, insert, update, delete on public.event_members to authenticated;
+
 revoke select on public.profiles from authenticated;
 grant select (
   id,
