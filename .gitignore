@@ -1,6 +1,9 @@
 node_modules
 .pnpm-store
 .next
+.expo
+mobile/dist
+mobile/dist-ios
 out
 .env*
 !.env.example

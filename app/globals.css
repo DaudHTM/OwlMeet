@@ -92,7 +92,7 @@ button { cursor: pointer; }
 .back-link { position: absolute; left: 24px; top: 24px; display: flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--muted); font-size: 12px; }
 .mail-illustration { width: 76px; height: 76px; margin: 8px auto 24px; display: grid; place-items: center; color: var(--green); background: var(--green-soft); border-radius: 50%; transform: rotate(-6deg); }
 .center-card .text-button { margin-top: 18px; color: var(--green-2); background: transparent; font-size: 12px; }
-.invite-card a { text-decoration: none; }.invite-card .eyebrow { margin-top: 3px; }.invite-card > p { margin-bottom: 24px; }
+.invite-card a { text-decoration: none; }.invite-card .eyebrow { margin-top: 3px; }.invite-card > p { margin-bottom: 24px; }.invite-native { margin-top: 10px; }
 .onboarding-page { align-items: start; padding-top: 7vh; }
 .onboarding-wrap { width: min(720px, 100%); }
 .onboarding-heading { text-align: center; margin-bottom: 28px; }

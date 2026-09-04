@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "OwlMeet",
+    "slug": "owlmeet",
+    "version": "1.0.0",
+    "icon": "./assets/icon.png",
+    "orientation": "portrait",
+    "scheme": "owlmeet",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.owlmeet.app"
+    },
+    "android": {
+      "package": "com.owlmeet.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#1d4e4a"
+      }
+    },
+    "plugins": ["expo-sqlite"]
+  }
+}

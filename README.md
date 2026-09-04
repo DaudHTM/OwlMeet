@@ -2,7 +2,7 @@
 
 OwlMeet is an event-first social app for Rice University students. Students verify a `@rice.edu` email, create a campus profile, connect with friends, and organize small public or private events.
 
-The first mobile release is an installable responsive PWA, so the website and phone experience share one product codebase.
+OwlMeet includes both a responsive installable web app and a native Expo/React Native client for iOS and Android. Both use the same PostgreSQL schema and Supabase authentication.
 
 ## Product flows
 
@@ -21,6 +21,15 @@ pnpm dev
 ```
 
 Open `http://localhost:3000`. Without environment variables, OwlMeet runs in interactive demo mode. Enter any address ending in `@rice.edu`, choose **Open demo confirmation**, and complete onboarding.
+
+### Native mobile app
+
+```bash
+pnpm mobile:check
+pnpm mobile
+```
+
+The Expo app lives in `mobile/`. Copy `mobile/.env.example` to `mobile/.env`, add the same Supabase project values, and configure `owlmeet://**` as an additional Supabase Auth redirect URL. Without those variables, the native app runs in demo mode as well.
 
 ## Connect the PostgreSQL database
 
@@ -44,7 +53,6 @@ The SQL trigger rejects non-Rice accounts even if someone bypasses the interface
 ## Production checklist
 
 - Add real Supabase credentials and test magic-link delivery
-- Replace demo event/profile reads with paginated Supabase queries
 - Add notification delivery for requests and invitations
 - Add moderation, reporting, blocking, and event cancellation policies
 - Configure analytics and error monitoring

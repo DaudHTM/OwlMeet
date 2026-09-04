@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "mobile": "pnpm --dir mobile start",
+    "mobile:check": "pnpm --dir mobile typecheck"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",

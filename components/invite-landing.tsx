@@ -36,6 +36,7 @@ export function InviteLanding({ code }: { code: string }) {
         {status === "signin" && <><h1>Sign in to continue</h1><p>Only verified Rice students can view private event details.</p><Link className="primary wide" href="/">Continue with Rice email <ChevronRight size={18} /></Link></>}
         {status === "invalid" && <><h1>This invite isn’t available</h1><p>The link may be incorrect, expired, or the event may have been removed.</p><Link className="secondary wide" href="/">Go to OwlMeet</Link></>}
         {status === "demo" && <><h1>You found a private invite</h1><p>In demo mode, invitation links open the sample OwlMeet experience.</p><Link className="primary wide" href="/">Open OwlMeet <ChevronRight size={18} /></Link></>}
+        {status !== "loading" && status !== "invalid" && <a className="secondary wide invite-native" href={`owlmeet://invite/${code}`}>Open in the mobile app</a>}
       </section>
     </main>
   );
