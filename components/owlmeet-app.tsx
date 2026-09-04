@@ -27,6 +27,7 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 import { demoEvents, people } from "@/lib/demo-data";
 import { loadCommunityData } from "@/lib/remote-data";
+import { riceLocalToISOString } from "@/lib/rice-time";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import type { EventVisibility, OwlEvent, Person, Profile } from "@/lib/types";
 
@@ -112,12 +113,12 @@ export function OwlMeetApp() {
         const { error: inviteError } = await supabase.rpc("join_private_event", { code: pendingInvite });
         if (!inviteError) window.localStorage.removeItem("owlmeet-pending-invite");
       }
-      const { data: storedProfile } = await supabase.from("profiles").select("*").eq("id", data.session.user.id).single();
+      const { data: storedProfile } = await supabase.from("profiles").select("id, full_name, major, age, class_year, residential_college, onboarding_complete").eq("id", data.session.user.id).single();
       setEmail(data.session.user.email ?? "");
       if (storedProfile?.onboarding_complete) {
         const nextProfile: Profile = {
           name: storedProfile.full_name,
-          email: storedProfile.email,
+          email: data.session.user.email ?? "",
           major: storedProfile.major,
           age: storedProfile.age,
           year: storedProfile.class_year,
@@ -263,11 +264,17 @@ export function OwlMeetApp() {
       color: "#1d4e4a",
     };
     let id = `event-${Date.now()}`;
+    let dateTime: string;
+    try {
+      dateTime = riceLocalToISOString(newEvent.date, newEvent.time);
+    } catch (dateError) {
+      notify(dateError instanceof Error ? dateError.message : "Enter a valid date and time");
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     if (supabase) {
       const { data: authData } = await supabase.auth.getUser();
       if (authData.user) {
-        const dateTime = new Date(`${newEvent.date}T${convertTo24Hour(newEvent.time)}`).toISOString();
         const { data, error: insertError } = await supabase.from("events").insert({
           host_id: authData.user.id,
           title: newEvent.title,
@@ -534,4 +541,3 @@ function initials(name?: string) { return name ? name.split(" ").map((part) => p
 function dayNumber(date: string) { return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { day: "2-digit" }); }
 function monthShort(date: string) { return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short" }).toUpperCase(); }
 function longDate(date: string) { return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); }
-function convertTo24Hour(time: string) { const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i); if (!match) return "19:00:00"; let hours = Number(match[1]); if (match[3].toUpperCase() === "PM" && hours < 12) hours += 12; if (match[3].toUpperCase() === "AM" && hours === 12) hours = 0; return `${String(hours).padStart(2, "0")}:${match[2]}:00`; }

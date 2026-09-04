@@ -44,9 +44,9 @@ function toEvent(event: RawEvent, userId: string): OwlEvent {
   };
 }
 
-export async function loadNativeData(client: SupabaseClient, userId: string) {
+export async function loadNativeData(client: SupabaseClient, userId: string, email: string) {
   const [profileResult, eventsResult, friendshipsResult, profilesResult] = await Promise.all([
-    client.from("profiles").select("*").eq("id", userId).single(),
+    client.from("profiles").select("id, full_name, major, age, class_year, residential_college, onboarding_complete").eq("id", userId).single(),
     client.from("events").select(`
       id, host_id, title, description, location, starts_at, capacity, visibility, category, invite_code,
       host:profiles!events_host_id_fkey(id, full_name, major, class_year, residential_college),
@@ -68,7 +68,7 @@ export async function loadNativeData(client: SupabaseClient, userId: string) {
   const rawProfile = profileResult.data as RawProfile;
   const profile: Profile = {
     id: rawProfile.id,
-    email: rawProfile.email ?? "",
+    email,
     fullName: rawProfile.full_name ?? "",
     major: rawProfile.major ?? "",
     age: rawProfile.age ? String(rawProfile.age) : "",
