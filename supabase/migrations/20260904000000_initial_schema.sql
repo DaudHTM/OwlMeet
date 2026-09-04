@@ -137,12 +137,20 @@ with check ((select auth.uid()) = host_id);
 create policy "Hosts can delete events" on public.events
 for delete to authenticated using ((select auth.uid()) = host_id);
 
+create or replace function public.can_view_event_members(target_event_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.events e
+    where e.id = target_event_id
+      and (e.visibility = 'public' or e.host_id = (select auth.uid()))
+  ) or exists (
+    select 1 from public.event_members m
+    where m.event_id = target_event_id and m.user_id = (select auth.uid())
+  );
+$$;
+
 create policy "Users can view relevant event members" on public.event_members
-for select to authenticated using (
-  user_id = (select auth.uid())
-  or exists (select 1 from public.events e where e.id = event_id and e.host_id = (select auth.uid()))
-  or exists (select 1 from public.events e where e.id = event_id and e.visibility = 'public')
-);
+for select to authenticated using (public.can_view_event_members(event_id));
 create policy "Users can request public events" on public.event_members
 for insert to authenticated with check (
   user_id = (select auth.uid()) and status = 'requested'
@@ -172,6 +180,41 @@ for delete to authenticated using (
   user_id = (select auth.uid())
   or exists (select 1 from public.events e where e.id = event_id and e.host_id = (select auth.uid()))
 );
+
+create or replace function public.validate_event_member_change()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  actor uuid := (select auth.uid());
+  event_host uuid;
+  going_count integer;
+  event_capacity integer;
+begin
+  select host_id, capacity into event_host, event_capacity
+  from public.events where id = new.event_id;
+
+  if tg_op = 'UPDATE' and actor = new.user_id and actor <> event_host then
+    if not (
+      (old.status = 'invited' and new.status in ('going', 'declined'))
+      or (old.status in ('requested', 'going') and new.status = 'declined')
+    ) then
+      raise exception 'Invalid attendance status change';
+    end if;
+  end if;
+
+  if new.status = 'going' and (tg_op = 'INSERT' or old.status <> 'going') then
+    select count(*) into going_count from public.event_members
+    where event_id = new.event_id and status = 'going';
+    if going_count >= event_capacity then
+      raise exception 'This event is full';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger validate_event_member_change
+before insert or update on public.event_members
+for each row execute function public.validate_event_member_change();
 
 create or replace function public.join_private_event(code uuid)
 returns uuid language plpgsql security definer set search_path = '' as $$

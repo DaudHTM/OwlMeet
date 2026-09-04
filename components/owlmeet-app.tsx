@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { demoEvents, people } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/remote-data";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import type { EventVisibility, OwlEvent, Person, Profile } from "@/lib/types";
 
@@ -79,6 +80,7 @@ export function OwlMeetApp() {
   const [events, setEvents] = useState<OwlEvent[]>(demoEvents);
   const [friendRequests, setFriendRequests] = useState<Person[]>([people[0], people[3]]);
   const [friends, setFriends] = useState<Person[]>([people[2], people[4]]);
+  const [suggestions, setSuggestions] = useState<Person[]>([people[1]]);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<OwlEvent | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -105,6 +107,11 @@ export function OwlMeetApp() {
       if (!supabase) return;
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
+      const pendingInvite = window.localStorage.getItem("owlmeet-pending-invite");
+      if (pendingInvite) {
+        const { error: inviteError } = await supabase.rpc("join_private_event", { code: pendingInvite });
+        if (!inviteError) window.localStorage.removeItem("owlmeet-pending-invite");
+      }
       const { data: storedProfile } = await supabase.from("profiles").select("*").eq("id", data.session.user.id).single();
       setEmail(data.session.user.email ?? "");
       if (storedProfile?.onboarding_complete) {
@@ -117,6 +124,11 @@ export function OwlMeetApp() {
           college: storedProfile.residential_college,
         };
         setProfile(nextProfile);
+        const community = await loadCommunityData(supabase, data.session.user.id);
+        setEvents(community.events);
+        setFriends(community.friends);
+        setFriendRequests(community.requests);
+        setSuggestions(community.suggestions);
         setScreen("app");
       } else {
         setScreen("onboarding");
@@ -176,19 +188,47 @@ export function OwlMeetApp() {
     setScreen("app");
   };
 
-  const requestSpot = (eventId: string) => {
+  const requestSpot = async (eventId: string) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) return;
+      const { error: requestError } = await supabase.from("event_members").insert({ event_id: eventId, user_id: data.user.id, status: "requested" });
+      if (requestError) {
+        notify(requestError.message);
+        return;
+      }
+    }
     setEvents((items) => items.map((item) => item.id === eventId ? { ...item, requested: true } : item));
     setSelectedEvent((item) => item?.id === eventId ? { ...item, requested: true } : item);
     notify("Request sent to the host");
   };
 
-  const answerInvite = (eventId: string, accepted: boolean) => {
+  const answerInvite = async (eventId: string, accepted: boolean) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) return;
+      const { error: answerError } = await supabase.from("event_members").update({ status: accepted ? "going" : "declined" }).eq("event_id", eventId).eq("user_id", data.user.id);
+      if (answerError) {
+        notify(answerError.message);
+        return;
+      }
+    }
     setEvents((items) => items.map((item) => item.id === eventId ? { ...item, invited: false, requested: accepted } : item));
     setSelectedEvent(null);
     notify(accepted ? "You’re going! Added to your plans." : "Invitation declined");
   };
 
-  const approveGuest = (eventId: string, person: Person) => {
+  const approveGuest = async (eventId: string, person: Person) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { error: approvalError } = await supabase.from("event_members").update({ status: "going" }).eq("event_id", eventId).eq("user_id", person.id);
+      if (approvalError) {
+        notify(approvalError.message);
+        return;
+      }
+    }
     const update = (item: OwlEvent) => item.id === eventId
       ? { ...item, pending: item.pending.filter((guest) => guest.id !== person.id), attendees: [...item.attendees, person] }
       : item;
@@ -222,18 +262,64 @@ export function OwlMeetApp() {
           capacity: newEvent.capacity,
           visibility: newEvent.visibility,
           category: newEvent.category,
-        }).select("id").single();
+        }).select("id, invite_code").single();
         if (insertError) {
           notify(insertError.message);
           return;
         }
         id = data.id;
+        newEvent.inviteCode = data.invite_code;
       }
     }
-    setEvents((items) => [{ ...newEvent, id, host: self, attendees: [], pending: [], isOwner: true }, ...items]);
+    setEvents((items) => [{ ...newEvent, id, inviteCode: newEvent.inviteCode ?? `demo-${id}`, host: self, attendees: [], pending: [], isOwner: true }, ...items]);
     setShowCreate(false);
     setTab("events");
     notify("Event created");
+  };
+
+  const answerFriendRequest = async (person: Person, accepted: boolean) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) return;
+      const { error: friendError } = await supabase.from("friendships").update({ status: accepted ? "accepted" : "declined" }).eq("requester_id", person.id).eq("addressee_id", data.user.id);
+      if (friendError) {
+        notify(friendError.message);
+        return;
+      }
+    }
+    setFriendRequests((items) => items.filter((item) => item.id !== person.id));
+    if (accepted) {
+      setFriends((items) => [...items, person]);
+      notify(`You and ${person.name} are now friends`);
+    }
+  };
+
+  const sendFriendRequest = async (person: Person) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) return;
+      const { error: requestError } = await supabase.from("friendships").insert({ requester_id: data.user.id, addressee_id: person.id, status: "pending" });
+      if (requestError) {
+        notify(requestError.message);
+        return;
+      }
+    }
+    setSuggestions((items) => items.filter((item) => item.id !== person.id));
+    notify(`Friend request sent to ${person.name}`);
+  };
+
+  const inviteFriend = async (eventId: string, person: Person) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { error: inviteError } = await supabase.from("event_members").insert({ event_id: eventId, user_id: person.id, status: "invited" });
+      if (inviteError) {
+        notify(inviteError.message);
+        return;
+      }
+    }
+    notify(`Invitation sent to ${person.name}`);
   };
 
   const logOut = async () => {
@@ -270,9 +356,9 @@ export function OwlMeetApp() {
       {menuOpen && <div className="mobile-popover"><button onClick={() => { setTab("profile"); setMenuOpen(false); }}>Profile</button><button onClick={logOut}>Sign out</button></div>}
 
       <main className="main-content">
-        {tab === "discover" && <Discover events={visibleEvents} filter={filter} setFilter={setFilter} profile={profile} onCreate={() => setShowCreate(true)} onSelect={setSelectedEvent} onRequest={requestSpot} />}
+        {tab === "discover" && <Discover events={visibleEvents} filter={filter} setFilter={setFilter} profile={profile} onCreate={() => setShowCreate(true)} onSelect={setSelectedEvent} onRequest={(id) => void requestSpot(id)} />}
         {tab === "events" && <MyEvents events={upcoming} onSelect={setSelectedEvent} onCreate={() => setShowCreate(true)} />}
-        {tab === "friends" && <FriendsPage requests={friendRequests} friends={friends} onAccept={(person) => { setFriendRequests((items) => items.filter((item) => item.id !== person.id)); setFriends((items) => [...items, person]); notify(`You and ${person.name} are now friends`); }} onDecline={(person) => setFriendRequests((items) => items.filter((item) => item.id !== person.id))} notify={notify} />}
+        {tab === "friends" && <FriendsPage requests={friendRequests} friends={friends} suggestions={suggestions} onAccept={(person) => void answerFriendRequest(person, true)} onDecline={(person) => void answerFriendRequest(person, false)} onSend={(person) => void sendFriendRequest(person)} notify={notify} />}
         {tab === "profile" && profile && <ProfilePage profile={profile} events={events} friends={friends} onLogout={logOut} />}
       </main>
 
@@ -286,7 +372,7 @@ export function OwlMeetApp() {
       </nav>
 
       {showCreate && <CreateEventModal onClose={() => setShowCreate(false)} onCreate={addEvent} />}
-      {selectedEvent && <EventModal event={selectedEvent} friends={friends} onClose={() => setSelectedEvent(null)} onRequest={requestSpot} onInviteAnswer={answerInvite} onApprove={approveGuest} notify={notify} />}
+      {selectedEvent && <EventModal event={selectedEvent} friends={friends} onClose={() => setSelectedEvent(null)} onRequest={(id) => void requestSpot(id)} onInviteAnswer={(id, accepted) => void answerInvite(id, accepted)} onApprove={(id, person) => void approveGuest(id, person)} onInvite={(id, person) => void inviteFriend(id, person)} notify={notify} />}
       <div className="toast-region" aria-live="polite">{toasts.map((toast) => <div className="toast" key={toast.id}><Check size={17} />{toast.message}</div>)}</div>
     </div>
   );
@@ -405,9 +491,8 @@ function MyEvents({ events, onSelect, onCreate }: { events: OwlEvent[]; onSelect
   return <><section className="hero-row compact-hero"><div><span className="eyebrow">Your calendar</span><h1>My events</h1><p>Plans you’re hosting, joining, or invited to.</p></div><button className="primary desktop-create" onClick={onCreate}><Plus size={18} /> Create an event</button></section><div className="event-list">{events.map((event) => <button className="list-event" key={event.id} onClick={() => onSelect(event)}><span className="date-tile"><b>{dayNumber(event.date)}</b><small>{monthShort(event.date)}</small></span><div className="list-event-main"><span className="list-kicker">{event.isOwner ? "Hosting" : event.invited ? "Invitation" : "Requested"}</span><h3>{event.title}</h3><p><Clock3 size={15} /> {event.time}<i>·</i><MapPin size={15} /> {event.location}</p></div>{event.invited ? <span className="status-pill amber">Needs reply</span> : event.isOwner && event.pending.length ? <span className="status-pill">{event.pending.length} requests</span> : <ChevronRight size={20} />}</button>)}</div></>;
 }
 
-function FriendsPage({ requests, friends, onAccept, onDecline, notify }: { requests: Person[]; friends: Person[]; onAccept: (person: Person) => void; onDecline: (person: Person) => void; notify: (message: string) => void }) {
-  const suggestions = people.filter((person) => !requests.some((item) => item.id === person.id) && !friends.some((item) => item.id === person.id));
-  return <><section className="hero-row compact-hero"><div><span className="eyebrow">Your campus circle</span><h1>Friends</h1><p>Connect first, then make the plan.</p></div></section>{requests.length > 0 && <section><div className="section-head"><div><h2>Friend requests</h2><span>{requests.length} waiting</span></div></div><div className="people-grid">{requests.map((person) => <PersonCard key={person.id} person={person}><button className="primary compact" onClick={() => onAccept(person)}><Check size={16} /> Accept</button><button className="icon-btn" onClick={() => onDecline(person)} aria-label={`Decline ${person.name}`}><X size={18} /></button></PersonCard>)}</div></section>}<section><div className="section-head"><div><h2>Your friends</h2><span>{friends.length} connections</span></div></div><div className="people-grid">{friends.map((person) => <PersonCard key={person.id} person={person}><button className="secondary" onClick={() => notify(`Invite picker opened for ${person.name}`)}><Send size={15} /> Invite</button></PersonCard>)}</div></section><section><div className="section-head"><div><h2>People you may know</h2><span>Based on your Rice community</span></div></div><div className="people-grid">{suggestions.map((person) => <PersonCard key={person.id} person={person}><button className="secondary" onClick={() => notify(`Friend request sent to ${person.name}`)}><UserRoundCheck size={16} /> Add friend</button></PersonCard>)}</div></section></>;
+function FriendsPage({ requests, friends, suggestions, onAccept, onDecline, onSend, notify }: { requests: Person[]; friends: Person[]; suggestions: Person[]; onAccept: (person: Person) => void; onDecline: (person: Person) => void; onSend: (person: Person) => void; notify: (message: string) => void }) {
+  return <><section className="hero-row compact-hero"><div><span className="eyebrow">Your campus circle</span><h1>Friends</h1><p>Connect first, then make the plan.</p></div></section>{requests.length > 0 && <section><div className="section-head"><div><h2>Friend requests</h2><span>{requests.length} waiting</span></div></div><div className="people-grid">{requests.map((person) => <PersonCard key={person.id} person={person}><button className="primary compact" onClick={() => onAccept(person)}><Check size={16} /> Accept</button><button className="icon-btn" onClick={() => onDecline(person)} aria-label={`Decline ${person.name}`}><X size={18} /></button></PersonCard>)}</div></section>}<section><div className="section-head"><div><h2>Your friends</h2><span>{friends.length} connections</span></div></div><div className="people-grid">{friends.map((person) => <PersonCard key={person.id} person={person}><button className="secondary" onClick={() => notify(`Invite picker opened for ${person.name}`)}><Send size={15} /> Invite</button></PersonCard>)}</div></section><section><div className="section-head"><div><h2>People you may know</h2><span>Based on your Rice community</span></div></div><div className="people-grid">{suggestions.map((person) => <PersonCard key={person.id} person={person}><button className="secondary" onClick={() => onSend(person)}><UserRoundCheck size={16} /> Add friend</button></PersonCard>)}</div></section></>;
 }
 
 function PersonCard({ person, children }: { person: Person; children: React.ReactNode }) {
@@ -424,10 +509,10 @@ function CreateEventModal({ onClose, onCreate }: { onClose: () => void; onCreate
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal create-modal" role="dialog" aria-modal="true" aria-labelledby="create-title"><header><div><span className="eyebrow">Bring people together</span><h2 id="create-title">Create an event</h2></div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={20} /></button></header><form onSubmit={(event) => { event.preventDefault(); void onCreate({ ...form, capacity: Number(form.capacity), requested: false, invited: false }); }}><Field label="Event title"><input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="e.g. Casual ping pong" maxLength={80} required /></Field><Field label="What’s the plan?"><textarea value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="Set the vibe and let people know what to expect…" maxLength={600} required /><small className="char-count">{form.description.length}/600</small></Field><Field label="Location"><div className="input-with-icon"><MapPin size={17} /><input value={form.location} onChange={(event) => update("location", event.target.value)} placeholder="Where should everyone meet?" required /></div></Field><div className="form-grid three"><Field label="Date"><input type="date" value={form.date} onChange={(event) => update("date", event.target.value)} required /></Field><Field label="Time"><input value={form.time} onChange={(event) => update("time", event.target.value)} placeholder="7:00 PM" required /></Field><Field label="People"><input type="number" min="2" max="100" value={form.capacity} onChange={(event) => update("capacity", event.target.value)} required /></Field></div><div className="form-grid two"><Field label="Category"><select value={form.category} onChange={(event) => update("category", event.target.value)}>{["Games", "Food", "Chill", "Outdoors", "Study", "Other"].map((item) => <option key={item}>{item}</option>)}</select></Field><Field label="Who can see it?"><div className="visibility-toggle"><button type="button" className={form.visibility === "public" ? "active" : ""} onClick={() => update("visibility", "public")}><Eye size={15} /> Public</button><button type="button" className={form.visibility === "private" ? "active" : ""} onClick={() => update("visibility", "private")}><EyeOff size={15} /> Private</button></div></Field></div><div className="modal-note"><LockKeyhole size={16} /><span>{form.visibility === "public" ? "Anyone at Rice can discover this event. You approve who joins." : "Only people you invite or share the private link with can see it."}</span></div><footer><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Create event <ChevronRight size={17} /></button></footer></form></section></div>;
 }
 
-function EventModal({ event, friends, onClose, onRequest, onInviteAnswer, onApprove, notify }: { event: OwlEvent; friends: Person[]; onClose: () => void; onRequest: (id: string) => void; onInviteAnswer: (id: string, accepted: boolean) => void; onApprove: (eventId: string, person: Person) => void; notify: (message: string) => void }) {
+function EventModal({ event, friends, onClose, onRequest, onInviteAnswer, onApprove, onInvite, notify }: { event: OwlEvent; friends: Person[]; onClose: () => void; onRequest: (id: string) => void; onInviteAnswer: (id: string, accepted: boolean) => void; onApprove: (eventId: string, person: Person) => void; onInvite: (eventId: string, person: Person) => void; notify: (message: string) => void }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const spacesLeft = event.capacity - event.attendees.length;
-  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="modal event-detail" role="dialog" aria-modal="true"><header><div className="event-card-top"><span className="date-tile"><b>{dayNumber(event.date)}</b><small>{monthShort(event.date)}</small></span><span className="category-pill">{event.category}</span>{event.visibility === "private" && <span className="private-pill"><LockKeyhole size={12} /> Private</span>}</div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={20} /></button></header><h2>{event.title}</h2><p className="detail-description">{event.description}</p><div className="detail-facts"><span><Clock3 size={18} /><b>{event.time}</b><small>{longDate(event.date)}</small></span><span><MapPin size={18} /><b>{event.location}</b><small>Rice University campus</small></span></div><div className="detail-host"><Avatar person={event.host} /><span><small>Hosted by</small><strong>{event.host.name}</strong><em>{event.host.college ? `${event.host.college} · ${event.host.year}` : "Event host"}</em></span></div><section className="attendee-section"><div className="section-head"><div><h3>Going</h3><span>{event.attendees.length} of {event.capacity} · {spacesLeft} spots left</span></div></div><div className="attendee-list">{event.attendees.length ? event.attendees.map((person) => <div key={person.id}><Avatar person={person} size="sm" /><span>{person.name}</span></div>) : <p>No guests yet. Be the first to join.</p>}</div></section>{event.isOwner && event.pending.length > 0 && <section className="request-section"><div className="section-head"><div><h3>Requests</h3><span>Approve people to add them to Going</span></div></div>{event.pending.map((person) => <div className="request-row" key={person.id}><Avatar person={person} /><div><strong>{person.name}</strong><span>{person.major} · {person.college}</span></div><button className="primary compact" onClick={() => onApprove(event.id, person)}><Check size={15} /> Approve</button><button className="icon-btn"><X size={17} /></button></div>)}</section>}{event.isOwner && <div className="host-tools"><button className="secondary" onClick={() => setInviteOpen(!inviteOpen)}><Users size={16} /> Invite friends</button><button className="secondary" onClick={() => { void navigator.clipboard?.writeText(`${window.location.origin}/invite/${event.id}`); notify("Private invite link copied"); }}><Copy size={16} /> Copy invite link</button></div>}{inviteOpen && <div className="invite-picker">{friends.map((person) => <div key={person.id}><Avatar person={person} size="sm" /><span>{person.name}</span><button className="secondary" onClick={() => notify(`Invitation sent to ${person.name}`)}>Invite</button></div>)}</div>}<footer>{event.invited ? <><button className="secondary" onClick={() => onInviteAnswer(event.id, false)}>Decline</button><button className="primary" onClick={() => onInviteAnswer(event.id, true)}>Accept invitation</button></> : !event.isOwner && <button className={event.requested ? "secondary success wide" : "primary wide"} disabled={event.requested} onClick={() => onRequest(event.id)}>{event.requested ? <><Check size={16} /> Request sent</> : "Request to join"}</button>}</footer></section></div>;
+  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="modal event-detail" role="dialog" aria-modal="true"><header><div className="event-card-top"><span className="date-tile"><b>{dayNumber(event.date)}</b><small>{monthShort(event.date)}</small></span><span className="category-pill">{event.category}</span>{event.visibility === "private" && <span className="private-pill"><LockKeyhole size={12} /> Private</span>}</div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={20} /></button></header><h2>{event.title}</h2><p className="detail-description">{event.description}</p><div className="detail-facts"><span><Clock3 size={18} /><b>{event.time}</b><small>{longDate(event.date)}</small></span><span><MapPin size={18} /><b>{event.location}</b><small>Rice University campus</small></span></div><div className="detail-host"><Avatar person={event.host} /><span><small>Hosted by</small><strong>{event.host.name}</strong><em>{event.host.college ? `${event.host.college} · ${event.host.year}` : "Event host"}</em></span></div><section className="attendee-section"><div className="section-head"><div><h3>Going</h3><span>{event.attendees.length} of {event.capacity} · {spacesLeft} spots left</span></div></div><div className="attendee-list">{event.attendees.length ? event.attendees.map((person) => <div key={person.id}><Avatar person={person} size="sm" /><span>{person.name}</span></div>) : <p>No guests yet. Be the first to join.</p>}</div></section>{event.isOwner && event.pending.length > 0 && <section className="request-section"><div className="section-head"><div><h3>Requests</h3><span>Approve people to add them to Going</span></div></div>{event.pending.map((person) => <div className="request-row" key={person.id}><Avatar person={person} /><div><strong>{person.name}</strong><span>{person.major} · {person.college}</span></div><button className="primary compact" onClick={() => onApprove(event.id, person)}><Check size={15} /> Approve</button><button className="icon-btn"><X size={17} /></button></div>)}</section>}{event.isOwner && <div className="host-tools"><button className="secondary" onClick={() => setInviteOpen(!inviteOpen)}><Users size={16} /> Invite friends</button><button className="secondary" onClick={() => { void navigator.clipboard?.writeText(`${window.location.origin}/invite/${event.inviteCode ?? event.id}`); notify("Private invite link copied"); }}><Copy size={16} /> Copy invite link</button></div>}{inviteOpen && <div className="invite-picker">{friends.map((person) => <div key={person.id}><Avatar person={person} size="sm" /><span>{person.name}</span><button className="secondary" onClick={() => onInvite(event.id, person)}>Invite</button></div>)}</div>}<footer>{event.invited ? <><button className="secondary" onClick={() => onInviteAnswer(event.id, false)}>Decline</button><button className="primary" onClick={() => onInviteAnswer(event.id, true)}>Accept invitation</button></> : !event.isOwner && <button className={event.requested ? "secondary success wide" : "primary wide"} disabled={event.requested} onClick={() => onRequest(event.id)}>{event.requested ? <><Check size={16} /> Request sent</> : "Request to join"}</button>}</footer></section></div>;
 }
 
 function initials(name?: string) { return name ? name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() : "OW"; }

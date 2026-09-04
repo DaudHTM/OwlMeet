@@ -29,6 +29,7 @@ export type OwlEvent = {
   capacity: number;
   visibility: EventVisibility;
   category: string;
+  inviteCode?: string;
   host: Person;
   attendees: Person[];
   pending: Person[];
