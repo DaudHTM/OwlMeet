@@ -49,7 +49,7 @@ export const demoEvents: OwlEvent[] = [
     category: "Outdoors",
     inviteCode: "demo-study-break",
     host: { id: "you", name: "You", initials: "YO", major: "", year: "", college: "", color: "#1d4e4a" },
-    attendees: [],
+    attendees: [{ id: "you", name: "You", initials: "YO", major: "", year: "", college: "", color: "#1d4e4a" }],
     pending: [people[1], people[4]],
     isOwner: true,
   },

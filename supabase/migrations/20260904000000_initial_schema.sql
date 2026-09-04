@@ -190,7 +190,8 @@ declare
   event_capacity integer;
 begin
   select host_id, capacity into event_host, event_capacity
-  from public.events where id = new.event_id;
+  from public.events where id = new.event_id
+  for update;
 
   if tg_op = 'UPDATE' and actor = new.user_id and actor <> event_host then
     if not (

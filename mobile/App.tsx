@@ -9,6 +9,7 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -172,6 +173,17 @@ export default function App() {
     setMessage(`${person.name} is going`);
   };
 
+  const declineGuest = async (event: OwlEvent, person: Person) => {
+    if (!isDemoMode) {
+      const { error } = await supabase.from("event_members").update({ status: "declined" }).eq("event_id", event.id).eq("user_id", person.id);
+      if (error) return Alert.alert("Couldn’t decline request", error.message);
+    }
+    const update = (item: OwlEvent): OwlEvent => item.id === event.id ? { ...item, pending: item.pending.filter((guest) => guest.id !== person.id) } : item;
+    setEvents((items) => items.map(update));
+    setSelectedEvent((item) => item ? update(item) : null);
+    setMessage(`${person.name}’s request was declined`);
+  };
+
   const answerFriend = async (person: Person, accepted: boolean) => {
     if (!isDemoMode && profile) {
       const { error } = await supabase.from("friendships").update({ status: accepted ? "accepted" : "declined" }).eq("requester_id", person.id).eq("addressee_id", profile.id);
@@ -202,7 +214,7 @@ export default function App() {
       id = data.id;
       inviteCode = data.invite_code;
     }
-    setEvents((items) => [{ id, inviteCode, ...draft, capacity: Number(draft.capacity), startsAt: `${draft.date}T${to24Hour(draft.time)}-05:00`, host: self, attendees: [], pending: [], isOwner: true }, ...items]);
+    setEvents((items) => [{ id, inviteCode, ...draft, capacity: Number(draft.capacity), startsAt: `${draft.date}T${to24Hour(draft.time)}-05:00`, host: self, attendees: [self], pending: [], isOwner: true }, ...items]);
     setCreateOpen(false);
     setTab("events");
     setMessage("Event created");
@@ -224,7 +236,7 @@ export default function App() {
       {screen === "onboarding" && <Onboarding email={email} userId={profile?.id ?? "demo-user"} busy={busy} message={message} onFinish={(next) => void finishOnboarding(next)} />}
       {screen === "main" && profile && <MainApp profile={profile} events={events} friends={friends} requests={requests} suggestions={suggestions} tab={tab} setTab={setTab} message={message} clearMessage={() => setMessage("")} onCreate={() => setCreateOpen(true)} onSelect={setSelectedEvent} onFriend={answerFriend} onAddFriend={addFriend} onSignOut={signOut} />}
       <CreateEventModal visible={createOpen} onClose={() => setCreateOpen(false)} onCreate={(draft) => void createEvent(draft)} />
-      <EventDetail event={selectedEvent} friends={friends} onClose={() => setSelectedEvent(null)} onRequest={requestEvent} onAnswer={answerInvitation} onApprove={approveGuest} />
+      <EventDetail event={selectedEvent} friends={friends} onClose={() => setSelectedEvent(null)} onRequest={requestEvent} onAnswer={answerInvitation} onApprove={approveGuest} onDecline={declineGuest} />
     </SafeAreaView>
   );
 }
@@ -295,12 +307,12 @@ function CreateEventModal({ visible, onClose, onCreate }: { visible: boolean; on
   return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><SafeAreaView style={styles.modalPage}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}><View style={styles.modalHeader}><View><Text style={styles.eyebrow}>BRING PEOPLE TOGETHER</Text><Text style={styles.modalTitle}>Create an event</Text></View><Pressable style={styles.roundButton} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable></View><ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled"><Field label="Event title" value={draft.title} onChangeText={(value) => setDraft({ ...draft, title: value })} placeholder="e.g. Casual ping pong" /><View style={styles.field}><Text style={styles.label}>What’s the plan?</Text><TextInput multiline style={[styles.input, styles.textarea]} placeholder="Set the vibe and what to expect…" placeholderTextColor="#9da39f" value={draft.description} onChangeText={(value) => setDraft({ ...draft, description: value })} /></View><Field label="Location" value={draft.location} onChangeText={(value) => setDraft({ ...draft, location: value })} placeholder="Where should everyone meet?" /><View style={styles.twoColumns}><View style={styles.flex}><Field label="Date" value={draft.date} onChangeText={(value) => setDraft({ ...draft, date: value })} placeholder="YYYY-MM-DD" /></View><View style={styles.flex}><Field label="Time" value={draft.time} onChangeText={(value) => setDraft({ ...draft, time: value })} placeholder="7:00 PM" /></View></View><Field label="Number of people" value={draft.capacity} onChangeText={(value) => setDraft({ ...draft, capacity: value.replace(/\D/g, "") })} placeholder="6" keyboardType="number-pad" /><ChoiceField label="Category" values={["Games", "Food", "Chill", "Outdoors", "Study", "Other"]} selected={draft.category} onSelect={(category) => setDraft({ ...draft, category })} /><ChoiceField label="Who can see it?" values={["public", "private"]} selected={draft.visibility} onSelect={(visibility) => setDraft({ ...draft, visibility: visibility as EventVisibility })} /><View style={styles.trustBox}><Text style={styles.trustCopy}>{draft.visibility === "public" ? "Anyone at Rice can discover it. You approve who joins." : "Only invited friends or people with your private link can see it."}</Text></View><Pressable style={[styles.primaryButton, !valid && styles.disabled]} disabled={!valid} onPress={() => onCreate(draft)}><Text style={styles.primaryText}>Create event  ›</Text></Pressable></ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;
 }
 
-function EventDetail({ event, friends, onClose, onRequest, onAnswer, onApprove }: { event: OwlEvent | null; friends: Person[]; onClose: () => void; onRequest: (event: OwlEvent) => void; onAnswer: (event: OwlEvent, accepted: boolean) => void; onApprove: (event: OwlEvent, person: Person) => void }) {
+function EventDetail({ event, friends, onClose, onRequest, onAnswer, onApprove, onDecline }: { event: OwlEvent | null; friends: Person[]; onClose: () => void; onRequest: (event: OwlEvent) => void; onAnswer: (event: OwlEvent, accepted: boolean) => void; onApprove: (event: OwlEvent, person: Person) => void; onDecline: (event: OwlEvent, person: Person) => void }) {
   const [inviting, setInviting] = useState(false);
   if (!event) return null;
   const share = async () => {
     const url = Linking.createURL(`invite/${event.inviteCode ?? event.id}`);
-    await Linking.openURL(`mailto:?subject=Join%20my%20OwlMeet%20event&body=${encodeURIComponent(`Join ${event.title}: ${url}`)}`);
+    await Share.share({ title: `Join ${event.title} on OwlMeet`, message: `Join ${event.title}: ${url}`, url });
   };
   const invite = async (person: Person) => {
     if (!isDemoMode) {
@@ -309,7 +321,7 @@ function EventDetail({ event, friends, onClose, onRequest, onAnswer, onApprove }
     }
     Alert.alert("Invitation sent", `${person.name} can now accept or decline.`);
   };
-  return <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><SafeAreaView style={styles.modalPage}><View style={styles.modalHeader}><DateTile startsAt={event.startsAt} /><Pressable style={styles.roundButton} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable></View><ScrollView contentContainerStyle={styles.modalBody}><Text style={styles.modalTitle}>{event.title}</Text><Text style={styles.eventDescription}>{event.description}</Text><View style={styles.factBox}><Text style={styles.factTitle}>◷ {eventTime(event.startsAt)}</Text><Text style={styles.factSub}>{eventDate(event.startsAt)}</Text><Text style={[styles.factTitle, { marginTop: 12 }]}>⌖ {event.location}</Text><Text style={styles.factSub}>Rice University campus</Text></View><View style={styles.hostRow}><Avatar person={event.host} /><View><Text style={styles.factSub}>HOSTED BY</Text><Text style={styles.personName}>{event.host.name}</Text><Text style={styles.personMeta}>{event.host.subtitle}</Text></View></View><SectionTitle title="Going" subtitle={`${event.attendees.length} of ${event.capacity}`} />{event.attendees.length ? event.attendees.map((person) => <PersonRow key={person.id} person={person}><View /></PersonRow>) : <Text style={styles.emptyText}>No guests yet. Be the first.</Text>}{event.isOwner && event.pending.length > 0 && <><SectionTitle title="Requests" subtitle="Approve people into Going" />{event.pending.map((person) => <PersonRow key={person.id} person={person}><Pressable style={styles.smallPrimary} onPress={() => onApprove(event, person)}><Text style={styles.smallPrimaryText}>Approve</Text></Pressable></PersonRow>)}</>}{event.isOwner && <><View style={styles.twoColumns}><Pressable style={styles.outlineButton} onPress={() => setInviting(!inviting)}><Text style={styles.outlineText}>Invite friends</Text></Pressable><Pressable style={styles.outlineButton} onPress={() => void share()}><Text style={styles.outlineText}>Share link</Text></Pressable></View>{inviting && friends.map((person) => <PersonRow key={person.id} person={person}><Pressable style={styles.outlineButton} onPress={() => void invite(person)}><Text style={styles.outlineText}>Invite</Text></Pressable></PersonRow>)}</>}{event.membership === "invited" ? <View style={styles.twoColumns}><Pressable style={styles.outlineButton} onPress={() => void onAnswer(event, false)}><Text style={styles.outlineText}>Decline</Text></Pressable><Pressable style={styles.primaryButton} onPress={() => void onAnswer(event, true)}><Text style={styles.primaryText}>Accept invitation</Text></Pressable></View> : !event.isOwner && <Pressable style={[styles.primaryButton, event.membership === "requested" && styles.disabled]} disabled={event.membership === "requested"} onPress={() => void onRequest(event)}><Text style={styles.primaryText}>{event.membership === "requested" ? "Request sent ✓" : "Request to join"}</Text></Pressable>}</ScrollView></SafeAreaView></Modal>;
+  return <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><SafeAreaView style={styles.modalPage}><View style={styles.modalHeader}><DateTile startsAt={event.startsAt} /><Pressable style={styles.roundButton} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable></View><ScrollView contentContainerStyle={styles.modalBody}><Text style={styles.modalTitle}>{event.title}</Text><Text style={styles.eventDescription}>{event.description}</Text><View style={styles.factBox}><Text style={styles.factTitle}>◷ {eventTime(event.startsAt)}</Text><Text style={styles.factSub}>{eventDate(event.startsAt)}</Text><Text style={[styles.factTitle, { marginTop: 12 }]}>⌖ {event.location}</Text><Text style={styles.factSub}>Rice University campus</Text></View><View style={styles.hostRow}><Avatar person={event.host} /><View><Text style={styles.factSub}>HOSTED BY</Text><Text style={styles.personName}>{event.host.name}</Text><Text style={styles.personMeta}>{event.host.subtitle}</Text></View></View><SectionTitle title="Going" subtitle={`${event.attendees.length} of ${event.capacity}`} />{event.attendees.length ? event.attendees.map((person) => <PersonRow key={person.id} person={person}><View /></PersonRow>) : <Text style={styles.emptyText}>No guests yet. Be the first.</Text>}{event.isOwner && event.pending.length > 0 && <><SectionTitle title="Requests" subtitle="Approve people into Going" />{event.pending.map((person) => <PersonRow key={person.id} person={person}><Pressable style={styles.smallPrimary} onPress={() => onApprove(event, person)}><Text style={styles.smallPrimaryText}>Approve</Text></Pressable><Pressable style={styles.roundButton} onPress={() => onDecline(event, person)}><Text>×</Text></Pressable></PersonRow>)}</>}{event.isOwner && <><View style={styles.twoColumns}><Pressable style={styles.outlineButton} onPress={() => setInviting(!inviting)}><Text style={styles.outlineText}>Invite friends</Text></Pressable><Pressable style={styles.outlineButton} onPress={() => void share()}><Text style={styles.outlineText}>Share link</Text></Pressable></View>{inviting && friends.map((person) => <PersonRow key={person.id} person={person}><Pressable style={styles.outlineButton} onPress={() => void invite(person)}><Text style={styles.outlineText}>Invite</Text></Pressable></PersonRow>)}</>}{event.membership === "invited" ? <View style={styles.twoColumns}><Pressable style={styles.outlineButton} onPress={() => void onAnswer(event, false)}><Text style={styles.outlineText}>Decline</Text></Pressable><Pressable style={styles.primaryButton} onPress={() => void onAnswer(event, true)}><Text style={styles.primaryText}>Accept invitation</Text></Pressable></View> : !event.isOwner && <Pressable style={[styles.primaryButton, event.membership === "requested" && styles.disabled]} disabled={event.membership === "requested"} onPress={() => void onRequest(event)}><Text style={styles.primaryText}>{event.membership === "requested" ? "Request sent ✓" : "Request to join"}</Text></Pressable>}</ScrollView></SafeAreaView></Modal>;
 }
 
 function Avatar({ person, small, large }: { person: Person; small?: boolean; large?: boolean }) { return <View style={[styles.avatar, { backgroundColor: person.color }, small && styles.avatarSmall, large && styles.avatarLarge]}><Text style={[styles.avatarText, small && styles.avatarTextSmall, large && styles.avatarTextLarge]}>{person.initials}</Text></View>; }

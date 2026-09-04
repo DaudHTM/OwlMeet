@@ -36,7 +36,7 @@ The Expo app lives in `mobile/`. Copy `mobile/.env.example` to `mobile/.env`, ad
 OwlMeet uses Supabase for PostgreSQL, email authentication, and row-level security.
 
 1. Create a Supabase project.
-2. Run [`supabase/migrations/20260904000000_initial_schema.sql`](supabase/migrations/20260904000000_initial_schema.sql) in the Supabase SQL editor.
+2. Apply the SQL files in `supabase/migrations/` in filename order (or run `supabase db push` with the Supabase CLI).
 3. Copy `.env.example` to `.env.local` and add the project URL and anon key.
 4. In Supabase Auth URL configuration, add the local and deployed app URLs as redirect URLs.
 5. Customize the magic-link email template with the OwlMeet name and colors.
