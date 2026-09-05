@@ -2,6 +2,35 @@
 -- provisioned. This migration is intentionally safe to run on the existing
 -- Supabase database.
 
+alter table public.profiles
+drop constraint if exists profiles_complete_when_onboarded;
+
+alter table public.profiles
+add constraint profiles_complete_when_onboarded check (
+  not onboarding_complete
+  or (
+    nullif(btrim(full_name), '') is not null
+    and nullif(btrim(major), '') is not null
+    and age is not null
+    and class_year is not null
+    and class_year in ('Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'Graduate student')
+    and residential_college is not null
+    and residential_college in (
+      'Baker',
+      'Brown',
+      'Duncan',
+      'Hanszen',
+      'Jones',
+      'Lovett',
+      'Martel',
+      'McMurtry',
+      'Sid Richardson',
+      'Wiess',
+      'Will Rice'
+    )
+  )
+);
+
 create or replace function public.enforce_rice_auth_email()
 returns trigger language plpgsql set search_path = '' as $$
 begin

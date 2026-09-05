@@ -15,7 +15,31 @@ create table public.profiles (
   avatar_url text,
   onboarding_complete boolean not null default false,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint profiles_complete_when_onboarded check (
+    not onboarding_complete
+    or (
+      nullif(btrim(full_name), '') is not null
+      and nullif(btrim(major), '') is not null
+      and age is not null
+      and class_year is not null
+      and class_year in ('Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'Graduate student')
+      and residential_college is not null
+      and residential_college in (
+        'Baker',
+        'Brown',
+        'Duncan',
+        'Hanszen',
+        'Jones',
+        'Lovett',
+        'Martel',
+        'McMurtry',
+        'Sid Richardson',
+        'Wiess',
+        'Will Rice'
+      )
+    )
+  )
 );
 
 create table public.friendships (
