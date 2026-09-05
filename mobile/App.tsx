@@ -358,8 +358,11 @@ function EventDetail({ event, friends, onClose, onRequest, onAnswer, onApprove, 
   const [inviting, setInviting] = useState(false);
   if (!event) return null;
   const share = async () => {
-    const webBaseUrl = (process.env.EXPO_PUBLIC_WEB_URL ?? "https://owlmeet.app").replace(/\/$/, "");
-    const url = `${webBaseUrl}/invite/${event.inviteCode ?? event.id}`;
+    const inviteCode = event.inviteCode ?? event.id;
+    const configuredWebUrl = process.env.EXPO_PUBLIC_WEB_URL?.trim();
+    const url = configuredWebUrl
+      ? `${configuredWebUrl.replace(/\/$/, "")}/invite/${inviteCode}`
+      : Linking.createURL(`invite/${inviteCode}`);
     await Share.share({ title: `Join ${event.title} on OwlMeet`, message: `Join ${event.title}: ${url}`, url });
   };
   const invite = async (person: Person) => {
