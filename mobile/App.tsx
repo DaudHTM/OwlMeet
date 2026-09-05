@@ -153,18 +153,19 @@ export default function App() {
   };
 
   const finishOnboarding = async (next: Profile) => {
+    const normalized = { ...next, fullName: next.fullName.trim(), major: next.major.trim() };
     setBusy(true);
     if (isDemoMode) {
-      localStorage.setItem("owlmeet-native-demo-profile-v1", JSON.stringify(next));
+      localStorage.setItem("owlmeet-native-demo-profile-v1", JSON.stringify(normalized));
     } else {
-      const { error } = await supabase.from("profiles").update({ full_name: next.fullName, major: next.major, age: Number(next.age), class_year: next.year, residential_college: next.college, onboarding_complete: true }).eq("id", next.id);
+      const { error } = await supabase.from("profiles").update({ full_name: normalized.fullName, major: normalized.major, age: Number(normalized.age), class_year: normalized.year, residential_college: normalized.college, onboarding_complete: true }).eq("id", normalized.id);
       if (error) {
         setMessage(error.message);
         setBusy(false);
         return;
       }
     }
-    setProfile(next);
+    setProfile(normalized);
     setBusy(false);
     setScreen("main");
   };
@@ -302,7 +303,8 @@ function CheckEmail({ email, onBack, onDemo }: { email: string; onBack: () => vo
 
 function Onboarding({ email, userId, busy, message, onFinish }: { email: string; userId: string; busy: boolean; message: string; onFinish: (profile: Profile) => void }) {
   const [form, setForm] = useState({ fullName: "", major: "", age: "", year: "", college: "" });
-  const complete = Boolean(form.fullName && form.major && form.age && form.year && form.college);
+  const age = Number(form.age);
+  const complete = Boolean(form.fullName.trim() && form.major.trim() && age >= 16 && age <= 100 && form.year && form.college);
   return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}><ScrollView contentContainerStyle={styles.formPage} keyboardShouldPersistTaps="handled"><OwlLogo /><Text style={styles.eyebrow}>PROFILE SETUP · 1 OF 1</Text><Text style={styles.pageTitle}>Help people know you</Text><Text style={[styles.bodyCopy, styles.centerText]}>A little context makes saying hello much easier.</Text><View style={styles.formCard}><Field label="Your name" value={form.fullName} onChangeText={(value) => setForm({ ...form, fullName: value })} placeholder="What should people call you?" /><Field label="Major" value={form.major} onChangeText={(value) => setForm({ ...form, major: value })} placeholder="e.g. Computer Science" /><Field label="Age" value={form.age} onChangeText={(value) => setForm({ ...form, age: value.replace(/\D/g, "") })} placeholder="18" keyboardType="number-pad" /><ChoiceField label="Year" values={years} selected={form.year} onSelect={(value) => setForm({ ...form, year: value })} /><ChoiceField label="Residential college" values={colleges} selected={form.college} onSelect={(value) => setForm({ ...form, college: value })} />{Boolean(message) && <Text style={styles.error}>{message}</Text>}<Pressable style={[styles.primaryButton, (!complete || busy) && styles.disabled]} disabled={!complete || busy} onPress={() => onFinish({ id: userId, email, ...form })}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Start meeting Owls  ›</Text>}</Pressable></View></ScrollView></KeyboardAvoidingView>;
 }
 
@@ -350,7 +352,8 @@ type EventDraft = { title: string; description: string; location: string; date: 
 
 function CreateEventModal({ visible, onClose, onCreate }: { visible: boolean; onClose: () => void; onCreate: (draft: EventDraft) => void }) {
   const [draft, setDraft] = useState<EventDraft>(() => ({ title: "", description: "", location: "", date: riceToday(), time: "7:00 PM", capacity: "6", visibility: "public", category: "Games" }));
-  const valid = Boolean(draft.title && draft.description && draft.location && draft.date && draft.time && Number(draft.capacity) >= 2);
+  const capacity = Number(draft.capacity);
+  const valid = Boolean(draft.title.trim() && draft.description.trim() && draft.location.trim() && draft.date && draft.time && capacity >= 2 && capacity <= 100);
   return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><SafeAreaView style={styles.modalPage}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}><View style={styles.modalHeader}><View><Text style={styles.eyebrow}>BRING PEOPLE TOGETHER</Text><Text style={styles.modalTitle}>Create an event</Text></View><Pressable style={styles.roundButton} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable></View><ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled"><Field label="Event title" value={draft.title} onChangeText={(value) => setDraft({ ...draft, title: value })} placeholder="e.g. Casual ping pong" /><View style={styles.field}><Text style={styles.label}>What’s the plan?</Text><TextInput multiline style={[styles.input, styles.textarea]} placeholder="Set the vibe and what to expect…" placeholderTextColor="#9da39f" value={draft.description} onChangeText={(value) => setDraft({ ...draft, description: value })} /></View><Field label="Location" value={draft.location} onChangeText={(value) => setDraft({ ...draft, location: value })} placeholder="Where should everyone meet?" /><View style={styles.twoColumns}><View style={styles.flex}><Field label="Date" value={draft.date} onChangeText={(value) => setDraft({ ...draft, date: value })} placeholder="YYYY-MM-DD" /></View><View style={styles.flex}><Field label="Time" value={draft.time} onChangeText={(value) => setDraft({ ...draft, time: value })} placeholder="7:00 PM" /></View></View><Field label="Number of people" value={draft.capacity} onChangeText={(value) => setDraft({ ...draft, capacity: value.replace(/\D/g, "") })} placeholder="6" keyboardType="number-pad" /><ChoiceField label="Category" values={["Games", "Food", "Chill", "Outdoors", "Study", "Other"]} selected={draft.category} onSelect={(category) => setDraft({ ...draft, category })} /><ChoiceField label="Who can see it?" values={["public", "private"]} selected={draft.visibility} onSelect={(visibility) => setDraft({ ...draft, visibility: visibility as EventVisibility })} /><View style={styles.trustBox}><Text style={styles.trustCopy}>{draft.visibility === "public" ? "Anyone at Rice can discover it. You approve who joins." : "Only invited friends or people with your private link can see it."}</Text></View><Pressable style={[styles.primaryButton, !valid && styles.disabled]} disabled={!valid} onPress={() => onCreate(draft)}><Text style={styles.primaryText}>Create event  ›</Text></Pressable></ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;
 }
 

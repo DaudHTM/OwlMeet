@@ -162,17 +162,26 @@ export function OwlMeetApp() {
   };
 
   const completeOnboarding = async (nextProfile: Profile) => {
+    const normalizedProfile = {
+      ...nextProfile,
+      name: nextProfile.name.trim(),
+      major: nextProfile.major.trim(),
+    };
+    if (!normalizedProfile.name || !normalizedProfile.major || normalizedProfile.age < 16 || normalizedProfile.age > 100) {
+      setError("Add a name and major, and enter an age from 16 to 100.");
+      return;
+    }
     setLoading(true);
     const supabase = getSupabaseBrowserClient();
     if (supabase) {
       const { data } = await supabase.auth.getUser();
       if (data.user) {
         const { error: saveError } = await supabase.from("profiles").update({
-          full_name: nextProfile.name,
-          major: nextProfile.major,
-          age: nextProfile.age,
-          class_year: nextProfile.year,
-          residential_college: nextProfile.college,
+          full_name: normalizedProfile.name,
+          major: normalizedProfile.major,
+          age: normalizedProfile.age,
+          class_year: normalizedProfile.year,
+          residential_college: normalizedProfile.college,
           onboarding_complete: true,
         }).eq("id", data.user.id);
         if (saveError) {
@@ -182,9 +191,9 @@ export function OwlMeetApp() {
         }
       }
     } else {
-      window.localStorage.setItem("owlmeet-demo-profile-v1", JSON.stringify(nextProfile));
+      window.localStorage.setItem("owlmeet-demo-profile-v1", JSON.stringify(normalizedProfile));
     }
-    setProfile(nextProfile);
+    setProfile(normalizedProfile);
     setLoading(false);
     setScreen("app");
   };
