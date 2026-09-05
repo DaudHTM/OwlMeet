@@ -31,6 +31,17 @@ grant select, insert, update, delete on public.friendships to authenticated;
 grant select, insert, update, delete on public.events to authenticated;
 grant select, insert, update, delete on public.event_members to authenticated;
 
+-- Supabase's optional automatic-RLS trigger function does not need to be
+-- callable through the Data API. Keep this portable for projects where the
+-- dashboard feature is disabled and the function does not exist.
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated';
+  end if;
+end;
+$$;
+
 revoke select on public.profiles from authenticated;
 grant select (
   id,
