@@ -3,11 +3,11 @@ revoke all on function public.set_updated_at() from public;
 revoke all on function public.validate_event_member_change() from public;
 revoke all on function public.add_event_host_as_attendee() from public;
 revoke all on function public.can_view_event(public.events) from public;
-revoke all on function public.can_view_event_members(uuid) from public;
+revoke all on function public.can_view_event_member(uuid, uuid, public.event_member_status) from public;
 revoke all on function public.join_private_event(uuid) from public;
 
 grant execute on function public.can_view_event(public.events) to authenticated;
-grant execute on function public.can_view_event_members(uuid) to authenticated;
+grant execute on function public.can_view_event_member(uuid, uuid, public.event_member_status) to authenticated;
 grant execute on function public.join_private_event(uuid) to authenticated;
 
 -- New Supabase projects do not automatically expose public tables to the Data

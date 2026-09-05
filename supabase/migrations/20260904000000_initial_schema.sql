@@ -124,7 +124,9 @@ returns boolean language sql stable security definer set search_path = '' as $$
     or target_event.host_id = (select auth.uid())
     or exists (
       select 1 from public.event_members m
-      where m.event_id = target_event.id and m.user_id = (select auth.uid())
+      where m.event_id = target_event.id
+        and m.user_id = (select auth.uid())
+        and m.status in ('requested', 'invited', 'going')
     );
 $$;
 
@@ -138,20 +140,40 @@ with check ((select auth.uid()) = host_id);
 create policy "Hosts can delete events" on public.events
 for delete to authenticated using ((select auth.uid()) = host_id);
 
-create or replace function public.can_view_event_members(target_event_id uuid)
+create or replace function public.can_view_event_member(
+  target_event_id uuid,
+  target_user_id uuid,
+  target_status public.event_member_status
+)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (
+  select target_user_id = (select auth.uid())
+  or exists (
     select 1 from public.events e
     where e.id = target_event_id
-      and (e.visibility = 'public' or e.host_id = (select auth.uid()))
-  ) or exists (
-    select 1 from public.event_members m
-    where m.event_id = target_event_id and m.user_id = (select auth.uid())
+      and e.host_id = (select auth.uid())
+  )
+  or (
+    target_status = 'going'
+    and exists (
+      select 1 from public.events e
+      where e.id = target_event_id
+        and (
+          e.visibility = 'public'
+          or exists (
+            select 1 from public.event_members mine
+            where mine.event_id = target_event_id
+              and mine.user_id = (select auth.uid())
+              and mine.status in ('requested', 'invited', 'going')
+          )
+        )
+    )
   );
 $$;
 
 create policy "Users can view relevant event members" on public.event_members
-for select to authenticated using (public.can_view_event_members(event_id));
+for select to authenticated using (
+  public.can_view_event_member(event_id, user_id, status)
+);
 create policy "Users can request public events" on public.event_members
 for insert to authenticated with check (
   user_id = (select auth.uid()) and status = 'requested'
