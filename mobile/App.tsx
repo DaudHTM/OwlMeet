@@ -40,6 +40,15 @@ const colors = {
 
 const years = ["Freshman", "Sophomore", "Junior", "Senior", "Graduate"];
 const colleges = ["Baker", "Brown", "Duncan", "Hanszen", "Jones", "Lovett", "Martel", "McMurtry", "Sid Richardson", "Wiess", "Will Rice"];
+const pendingInviteKey = "owlmeet-native-pending-invite";
+
+function inviteCodeFromUrl(url: string) {
+  const parsed = Linking.parse(url);
+  const segments = (parsed.path ?? "").split("/").filter(Boolean);
+  if (parsed.hostname === "invite") return segments[0] ?? null;
+  if (segments[0] === "invite") return segments[1] ?? null;
+  return null;
+}
 
 export default function App() {
   const incomingUrl = Linking.useLinkingURL();
@@ -66,6 +75,18 @@ export default function App() {
     setScreen(data.onboardingComplete ? "main" : "onboarding");
   }, []);
 
+  const claimPendingInvite = useCallback(async () => {
+    const inviteCode = localStorage.getItem(pendingInviteKey);
+    if (!inviteCode) return;
+    const { error } = await supabase.rpc("join_private_event", { code: inviteCode });
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    localStorage.removeItem(pendingInviteKey);
+    setMessage("Private invitation added to My events");
+  }, []);
+
   useEffect(() => {
     void Promise.resolve().then(async () => {
       if (isDemoMode) {
@@ -77,14 +98,19 @@ export default function App() {
         return;
       }
       const { data } = await supabase.auth.getSession();
-      if (data.session) await refresh(data.session.user.id, data.session.user.email ?? "");
+      if (data.session) {
+        await claimPendingInvite();
+        await refresh(data.session.user.id, data.session.user.email ?? "");
+      }
     });
-  }, [refresh]);
+  }, [claimPendingInvite, refresh]);
 
   useEffect(() => {
     if (!incomingUrl || isDemoMode) return;
     void Promise.resolve().then(async () => {
       const parsed = Linking.parse(incomingUrl);
+      const inviteCode = inviteCodeFromUrl(incomingUrl);
+      if (inviteCode) localStorage.setItem(pendingInviteKey, inviteCode);
       const fragment = incomingUrl.includes("#") ? incomingUrl.split("#")[1] : "";
       const fragmentParams = new URLSearchParams(fragment);
       const accessToken = fragmentParams.get("access_token");
@@ -94,16 +120,17 @@ export default function App() {
       else if (accessToken && refreshToken) await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
 
       const { data } = await supabase.auth.getUser();
-      if (!data.user) return;
-      const path = parsed.path ?? "";
-      if (path.startsWith("invite/")) {
-        const inviteCode = path.split("/")[1];
-        const { error } = await supabase.rpc("join_private_event", { code: inviteCode });
-        setMessage(error ? error.message : "Private invitation added to My events");
+      if (!data.user) {
+        if (inviteCode) {
+          setScreen("auth");
+          setMessage("Sign in with your Rice email to open this private invitation.");
+        }
+        return;
       }
+      await claimPendingInvite();
       await refresh(data.user.id, data.user.email ?? "");
     });
-  }, [incomingUrl, refresh]);
+  }, [claimPendingInvite, incomingUrl, refresh]);
 
   const sendMagicLink = async () => {
     const normalized = email.trim().toLowerCase();
