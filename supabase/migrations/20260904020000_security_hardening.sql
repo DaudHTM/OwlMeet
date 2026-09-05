@@ -27,7 +27,9 @@ grant update (
   onboarding_complete
 ) on public.profiles to authenticated;
 
-grant select, insert, update, delete on public.friendships to authenticated;
+grant select, insert, delete on public.friendships to authenticated;
+revoke update on public.friendships from authenticated;
+grant update (status) on public.friendships to authenticated;
 grant select, insert, update, delete on public.events to authenticated;
 grant select, insert, update, delete on public.event_members to authenticated;
 
