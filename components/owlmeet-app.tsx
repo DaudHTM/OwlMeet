@@ -207,16 +207,33 @@ export function OwlMeetApp() {
 
   const answerInvite = async (eventId: string, accepted: boolean) => {
     const supabase = getSupabaseBrowserClient();
+    let userId = "you";
     if (supabase) {
       const { data } = await supabase.auth.getUser();
       if (!data.user) return;
+      userId = data.user.id;
       const { error: answerError } = await supabase.from("event_members").update({ status: accepted ? "going" : "declined" }).eq("event_id", eventId).eq("user_id", data.user.id);
       if (answerError) {
         notify(answerError.message);
         return;
       }
     }
-    setEvents((items) => items.map((item) => item.id === eventId ? { ...item, membership: accepted ? "going" : "declined" } : item));
+    const self: Person = {
+      id: userId,
+      name: profile?.name || "You",
+      initials: initials(profile?.name),
+      major: profile?.major || "",
+      year: profile?.year || "",
+      college: profile?.college || "",
+      color: "#1d4e4a",
+    };
+    setEvents((items) => items.map((item) => item.id === eventId ? {
+      ...item,
+      membership: accepted ? "going" : "declined",
+      attendees: accepted && !item.attendees.some((person) => person.id === userId)
+        ? [...item.attendees, self]
+        : item.attendees,
+    } : item));
     setSelectedEvent(null);
     notify(accepted ? "You’re going! Added to your plans." : "Invitation declined");
   };

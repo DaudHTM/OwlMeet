@@ -185,7 +185,21 @@ export default function App() {
       const { error } = await supabase.from("event_members").update({ status: accepted ? "going" : "declined" }).eq("event_id", event.id).eq("user_id", profile.id);
       if (error) return Alert.alert("Couldn’t update invitation", error.message);
     }
-    setEvents((items) => items.map((item) => item.id === event.id ? { ...item, membership: accepted ? "going" : "declined" } : item));
+    const self: Person | null = profile ? {
+      id: profile.id,
+      name: profile.fullName,
+      initials: initials(profile.fullName),
+      subtitle: `${profile.major} · ${profile.year}`,
+      college: profile.college,
+      color: colors.green,
+    } : null;
+    setEvents((items) => items.map((item) => item.id === event.id ? {
+      ...item,
+      membership: accepted ? "going" : "declined",
+      attendees: accepted && self && !item.attendees.some((person) => person.id === self.id)
+        ? [...item.attendees, self]
+        : item.attendees,
+    } : item));
     setSelectedEvent(null);
     setMessage(accepted ? "You’re going!" : "Invitation declined");
   };
