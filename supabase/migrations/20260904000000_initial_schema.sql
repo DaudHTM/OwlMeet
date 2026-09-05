@@ -212,12 +212,6 @@ for update to authenticated using (
   user_id = (select auth.uid())
   or exists (select 1 from public.events e where e.id = event_id and e.host_id = (select auth.uid()))
 );
-create policy "Users or hosts can remove event membership" on public.event_members
-for delete to authenticated using (
-  user_id = (select auth.uid())
-  or exists (select 1 from public.events e where e.id = event_id and e.host_id = (select auth.uid()))
-);
-
 create or replace function public.validate_event_member_change()
 returns trigger language plpgsql set search_path = '' as $$
 declare
@@ -253,6 +247,25 @@ $$;
 create trigger validate_event_member_change
 before insert or update on public.event_members
 for each row execute function public.validate_event_member_change();
+
+create or replace function public.protect_event_host_attendance()
+returns trigger language plpgsql set search_path = '' as $$
+declare event_host uuid;
+begin
+  select host_id into event_host
+  from public.events
+  where id = old.event_id;
+
+  if old.user_id = event_host and new.status <> 'going' then
+    raise exception 'The event host must remain in Going';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger protect_event_host_attendance
+before update on public.event_members
+for each row execute function public.protect_event_host_attendance();
 
 create or replace function public.join_private_event(code uuid)
 returns uuid language plpgsql security definer set search_path = '' as $$

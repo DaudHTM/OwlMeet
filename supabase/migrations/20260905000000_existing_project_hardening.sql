@@ -19,6 +19,32 @@ create trigger enforce_rice_auth_email
 before insert or update of email on auth.users
 for each row execute function public.enforce_rice_auth_email();
 
+create or replace function public.protect_event_host_attendance()
+returns trigger language plpgsql set search_path = '' as $$
+declare event_host uuid;
+begin
+  select host_id into event_host
+  from public.events
+  where id = old.event_id;
+
+  if old.user_id = event_host and new.status <> 'going' then
+    raise exception 'The event host must remain in Going';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.protect_event_host_attendance() from public;
+
+drop policy if exists "Users or hosts can remove event membership"
+  on public.event_members;
+revoke delete on public.event_members from authenticated;
+
+drop trigger if exists protect_event_host_attendance on public.event_members;
+create trigger protect_event_host_attendance
+before update on public.event_members
+for each row execute function public.protect_event_host_attendance();
+
 do $$
 begin
   if to_regprocedure('public.rls_auto_enable()') is not null then

@@ -2,6 +2,7 @@ revoke all on function public.handle_new_user() from public;
 revoke all on function public.enforce_rice_auth_email() from public;
 revoke all on function public.set_updated_at() from public;
 revoke all on function public.validate_event_member_change() from public;
+revoke all on function public.protect_event_host_attendance() from public;
 revoke all on function public.add_event_host_as_attendee() from public;
 revoke all on function public.can_view_event(public.events) from public;
 revoke all on function public.can_view_event_member(uuid, uuid, public.event_member_status) from public;
@@ -32,7 +33,8 @@ grant select, insert, delete on public.friendships to authenticated;
 revoke update on public.friendships from authenticated;
 grant update (status) on public.friendships to authenticated;
 grant select, insert, update, delete on public.events to authenticated;
-grant select, insert, update, delete on public.event_members to authenticated;
+revoke delete on public.event_members from authenticated;
+grant select, insert, update on public.event_members to authenticated;
 
 -- Supabase's optional automatic-RLS trigger function does not need to be
 -- callable through the Data API. Keep this portable for projects where the
