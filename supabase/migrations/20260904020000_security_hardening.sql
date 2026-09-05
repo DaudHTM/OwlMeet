@@ -1,4 +1,5 @@
 revoke all on function public.handle_new_user() from public;
+revoke all on function public.enforce_rice_auth_email() from public;
 revoke all on function public.set_updated_at() from public;
 revoke all on function public.validate_event_member_change() from public;
 revoke all on function public.add_event_host_as_attendee() from public;

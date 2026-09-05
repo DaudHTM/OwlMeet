@@ -2,6 +2,23 @@
 -- provisioned. This migration is intentionally safe to run on the existing
 -- Supabase database.
 
+create or replace function public.enforce_rice_auth_email()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.email is null or lower(new.email) not like '%@rice.edu' then
+    raise exception 'OwlMeet requires a verified @rice.edu email address';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.enforce_rice_auth_email() from public;
+
+drop trigger if exists enforce_rice_auth_email on auth.users;
+create trigger enforce_rice_auth_email
+before insert or update of email on auth.users
+for each row execute function public.enforce_rice_auth_email();
+
 do $$
 begin
   if to_regprocedure('public.rls_auto_enable()') is not null then

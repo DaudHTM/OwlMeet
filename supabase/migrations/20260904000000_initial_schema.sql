@@ -80,6 +80,20 @@ for each row execute function public.set_updated_at();
 create trigger event_members_updated_at before update on public.event_members
 for each row execute function public.set_updated_at();
 
+create or replace function public.enforce_rice_auth_email()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.email is null or lower(new.email) not like '%@rice.edu' then
+    raise exception 'OwlMeet requires a verified @rice.edu email address';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger enforce_rice_auth_email
+before insert or update of email on auth.users
+for each row execute function public.enforce_rice_auth_email();
+
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
