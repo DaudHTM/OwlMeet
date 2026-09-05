@@ -18,6 +18,7 @@ export type Person = {
 };
 
 export type EventVisibility = "public" | "private";
+export type EventMembership = "requested" | "invited" | "going" | "declined";
 
 export type OwlEvent = {
   id: string;
@@ -33,7 +34,6 @@ export type OwlEvent = {
   host: Person;
   attendees: Person[];
   pending: Person[];
-  requested?: boolean;
-  invited?: boolean;
+  membership?: EventMembership;
   isOwner?: boolean;
 };

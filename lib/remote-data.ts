@@ -50,8 +50,7 @@ function mapEvent(raw: RawEvent, userId: string): OwlEvent {
     host: personFromProfile(single(raw.host)),
     attendees: members.filter((member) => member.status === "going").map((member) => personFromProfile(single(member.profile))),
     pending: members.filter((member) => member.status === "requested").map((member) => personFromProfile(single(member.profile))),
-    requested: currentMembership?.status === "requested" || currentMembership?.status === "going",
-    invited: currentMembership?.status === "invited",
+    membership: currentMembership?.status,
     isOwner: raw.host_id === userId,
   };
 }

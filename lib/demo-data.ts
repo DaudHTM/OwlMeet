@@ -67,6 +67,6 @@ export const demoEvents: OwlEvent[] = [
     host: people[2],
     attendees: [people[2]],
     pending: [],
-    invited: true,
+    membership: "invited",
   },
 ];
