@@ -3,6 +3,7 @@ revoke all on function public.enforce_rice_auth_email() from public;
 revoke all on function public.set_updated_at() from public;
 revoke all on function public.validate_event_member_change() from public;
 revoke all on function public.protect_event_host_attendance() from public;
+revoke all on function public.validate_host_event_member_change() from public;
 revoke all on function public.add_event_host_as_attendee() from public;
 revoke all on function public.can_view_event(public.events) from public;
 revoke all on function public.can_view_event_member(uuid, uuid, public.event_member_status) from public;

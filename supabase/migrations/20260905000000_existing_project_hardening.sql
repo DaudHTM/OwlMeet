@@ -74,6 +74,37 @@ create trigger protect_event_host_attendance
 before update on public.event_members
 for each row execute function public.protect_event_host_attendance();
 
+create or replace function public.validate_host_event_member_change()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  actor uuid := (select auth.uid());
+  event_host uuid;
+begin
+  select host_id into event_host
+  from public.events
+  where id = new.event_id;
+
+  if actor = event_host
+    and new.user_id <> event_host
+    and not (
+      old.status = new.status
+      or (old.status = 'requested' and new.status in ('going', 'declined'))
+      or (old.status = 'declined' and new.status = 'invited')
+    )
+  then
+    raise exception 'Invalid host attendance status change';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.validate_host_event_member_change() from public;
+
+drop trigger if exists validate_host_event_member_change on public.event_members;
+create trigger validate_host_event_member_change
+before update on public.event_members
+for each row execute function public.validate_host_event_member_change();
+
 do $$
 begin
   if to_regprocedure('public.rls_auto_enable()') is not null then
@@ -157,3 +188,47 @@ create policy "Users can view relevant event members"
 on public.event_members
 for select to authenticated
 using (public.can_view_event_member(event_id, user_id, status));
+
+drop policy if exists "Hosts can invite users" on public.event_members;
+create policy "Hosts can invite users" on public.event_members
+for insert to authenticated with check (
+  status = 'invited'
+  and exists (
+    select 1 from public.events e
+    where e.id = event_id
+      and e.host_id = (select auth.uid())
+      and e.visibility = 'private'
+  )
+  and exists (
+    select 1 from public.friendships f
+    where f.status = 'accepted'
+      and (
+        (f.requester_id = (select auth.uid()) and f.addressee_id = user_id)
+        or (f.addressee_id = (select auth.uid()) and f.requester_id = user_id)
+      )
+  )
+);
+
+create or replace function public.join_private_event(code uuid)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare target_id uuid;
+begin
+  select id into target_id
+  from public.events
+  where invite_code = code and visibility = 'private';
+  if target_id is null then raise exception 'Invalid invitation'; end if;
+
+  delete from public.event_members
+  where event_id = target_id
+    and user_id = (select auth.uid())
+    and status = 'declined';
+
+  insert into public.event_members(event_id, user_id, status)
+  values (target_id, (select auth.uid()), 'invited')
+  on conflict (event_id, user_id) do nothing;
+  return target_id;
+end;
+$$;
+
+revoke all on function public.join_private_event(uuid) from public;
+grant execute on function public.join_private_event(uuid) to authenticated;
