@@ -61,6 +61,7 @@ create index events_starts_at_idx on public.events(starts_at);
 create index events_host_id_idx on public.events(host_id);
 create index event_members_user_id_idx on public.event_members(user_id);
 create index friendships_addressee_idx on public.friendships(addressee_id, status);
+create index friendships_requester_idx on public.friendships(requester_id, status);
 
 create or replace function public.set_updated_at()
 returns trigger language plpgsql set search_path = '' as $$
