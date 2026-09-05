@@ -376,7 +376,9 @@ export function OwlMeetApp() {
   if (screen === "check-email") return <CheckEmail email={email} onBack={() => setScreen("welcome")} onDemo={() => setScreen("onboarding")} />;
   if (screen === "onboarding") return <Onboarding email={email} loading={loading} error={error} onComplete={completeOnboarding} />;
 
-  const visibleEvents = events.filter((event) => filter === "All" || event.category === filter);
+  const visibleEvents = events.filter((event) =>
+    event.visibility === "public" && (filter === "All" || event.category === filter),
+  );
   const upcoming = events.filter((event) => event.isOwner || event.membership === "requested" || event.membership === "invited" || event.membership === "going");
 
   return (
