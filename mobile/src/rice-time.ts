@@ -1,5 +1,25 @@
 const RICE_TIME_ZONE = "America/Chicago";
 
+export function riceToday(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: RICE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+export function riceTodayLabel(now = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: RICE_TIME_ZONE,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(now);
+}
+
 function offsetMilliseconds(date: Date) {
   const label = new Intl.DateTimeFormat("en-US", { timeZone: RICE_TIME_ZONE, timeZoneName: "longOffset" })
     .formatToParts(date)

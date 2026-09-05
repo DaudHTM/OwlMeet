@@ -27,7 +27,7 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 import { demoEvents, people } from "@/lib/demo-data";
 import { loadCommunityData } from "@/lib/remote-data";
-import { riceLocalToISOString } from "@/lib/rice-time";
+import { riceLocalToISOString, riceToday, riceTodayLabel } from "@/lib/rice-time";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import type { EventVisibility, OwlEvent, Person, Profile } from "@/lib/types";
 
@@ -505,7 +505,7 @@ function Discover({ events, filter, setFilter, profile, onCreate, onSelect, onRe
   return (
     <>
       <section className="hero-row">
-        <div><span className="eyebrow">Friday, September 4</span><h1>What’s happening, {profile?.name?.split(" ")[0] || "Owl"}?</h1><p>Small plans, friendly faces, and no awkward cold approach.</p></div>
+        <div><span className="eyebrow">{riceTodayLabel()}</span><h1>What’s happening, {profile?.name?.split(" ")[0] || "Owl"}?</h1><p>Small plans, friendly faces, and no awkward cold approach.</p></div>
         <button className="primary desktop-create" onClick={onCreate}><Plus size={18} /> Create an event</button>
       </section>
       <section className="prompt-banner"><div className="prompt-icon"><HeartHandshake size={26} /></div><div><strong>Have a plan? Make it social.</strong><span>Even “grabbing lunch” can be an event.</span></div><button onClick={onCreate}>Post a plan <ChevronRight size={16} /></button></section>
@@ -549,7 +549,7 @@ function ProfilePage({ profile, events, friends, onLogout }: { profile: Profile;
 }
 
 function CreateEventModal({ onClose, onCreate }: { onClose: () => void; onCreate: (event: Omit<OwlEvent, "id" | "host" | "attendees" | "pending" | "isOwner">) => void }) {
-  const [form, setForm] = useState({ title: "", description: "", location: "", date: "2026-09-05", time: "7:00 PM", capacity: "6", visibility: "public" as EventVisibility, category: "Games" });
+  const [form, setForm] = useState(() => ({ title: "", description: "", location: "", date: riceToday(), time: "7:00 PM", capacity: "6", visibility: "public" as EventVisibility, category: "Games" }));
   const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal create-modal" role="dialog" aria-modal="true" aria-labelledby="create-title"><header><div><span className="eyebrow">Bring people together</span><h2 id="create-title">Create an event</h2></div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={20} /></button></header><form onSubmit={(event) => { event.preventDefault(); void onCreate({ ...form, capacity: Number(form.capacity) }); }}><Field label="Event title"><input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="e.g. Casual ping pong" maxLength={80} required /></Field><Field label="What’s the plan?"><textarea value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="Set the vibe and let people know what to expect…" maxLength={600} required /><small className="char-count">{form.description.length}/600</small></Field><Field label="Location"><div className="input-with-icon"><MapPin size={17} /><input value={form.location} onChange={(event) => update("location", event.target.value)} placeholder="Where should everyone meet?" required /></div></Field><div className="form-grid three"><Field label="Date"><input type="date" value={form.date} onChange={(event) => update("date", event.target.value)} required /></Field><Field label="Time"><input value={form.time} onChange={(event) => update("time", event.target.value)} placeholder="7:00 PM" required /></Field><Field label="People"><input type="number" min="2" max="100" value={form.capacity} onChange={(event) => update("capacity", event.target.value)} required /></Field></div><div className="form-grid two"><Field label="Category"><select value={form.category} onChange={(event) => update("category", event.target.value)}>{["Games", "Food", "Chill", "Outdoors", "Study", "Other"].map((item) => <option key={item}>{item}</option>)}</select></Field><Field label="Who can see it?"><div className="visibility-toggle"><button type="button" className={form.visibility === "public" ? "active" : ""} onClick={() => update("visibility", "public")}><Eye size={15} /> Public</button><button type="button" className={form.visibility === "private" ? "active" : ""} onClick={() => update("visibility", "private")}><EyeOff size={15} /> Private</button></div></Field></div><div className="modal-note"><LockKeyhole size={16} /><span>{form.visibility === "public" ? "Anyone at Rice can discover this event. You approve who joins." : "Only people you invite or share the private link with can see it."}</span></div><footer><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Create event <ChevronRight size={17} /></button></footer></form></section></div>;
 }
